@@ -10,7 +10,7 @@ namespace RabbitLight.ConsoleApp.Sample.Consumers
         [Queue(Queues.TestQueue)]
         public void Test(MessageContext<string> context)
         {
-            var msg = context.MessageAsString();
+            var msg = context.MessageString();
             Console.WriteLine($"Message received: {msg}");
         }
     }

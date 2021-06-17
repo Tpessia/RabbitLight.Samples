@@ -23,8 +23,8 @@ namespace RabbitLight.AspNetCore.Sample.Controllers
         public async Task<string> Test()
         {
             var body = new TestMessage { Content = "Test" };
-            await _publisher.PublishJson(Exchanges.Test1, RoutingKeys.Test2, body);
-            await _publisher.PublishJson(Exchanges.Test2, RoutingKeys.Test1, body);
+            await _publisher.PublishJson(Exchanges.Test, RoutingKeys.Test1, body);
+            await _publisher.PublishJson(Exchanges.Test, RoutingKeys.Test2, body);
             return "Message published!";
         }
 
@@ -36,7 +36,7 @@ namespace RabbitLight.AspNetCore.Sample.Controllers
             for (var i = 0; i < size; i++)
             {
                 batch.Add(new PublishBatch(
-                    Exchanges.Test1,
+                    Exchanges.Test,
                     RoutingKeys.Test1,
                     MessageType.Json,
                     new TestMessage { Content = $"Batch: {i}" }
@@ -48,19 +48,31 @@ namespace RabbitLight.AspNetCore.Sample.Controllers
             return "Messages published!";
         }
 
-        [HttpGet("discard")]
-        public async Task<string> Discard()
+        [HttpGet("batch/serially")]
+        public async Task<string> BatchSerially(int size = 500)
         {
-            var body = new TestMessage { Content = "Discard test" };
-            await _publisher.PublishJson(Exchanges.Test1, RoutingKeys.Discard, body);
-            return "Message published!";
+            var batch = new List<PublishBatch>();
+
+            for (var i = 0; i < size; i++)
+            {
+                batch.Add(new PublishBatch(
+                    Exchanges.Test,
+                    RoutingKeys.TestSerially,
+                    MessageType.Json,
+                    new TestMessage { Content = $"Batch Serially: {i}" }
+                ));
+            }
+
+            await _publisher.PublishBatch(batch);
+
+            return "Messages published!";
         }
 
         [HttpGet("error")]
         public async Task<string> Error()
         {
             var body = new TestMessage { Content = "Error test" };
-            await _publisher.PublishJson(Exchanges.Test1, RoutingKeys.Error, body);
+            await _publisher.PublishJson(Exchanges.Test, RoutingKeys.Error, body);
             return "Message published!";
         }
 
@@ -71,7 +83,7 @@ namespace RabbitLight.AspNetCore.Sample.Controllers
             while (true)
             {
                 await _publisher.PublishJson(
-                    Exchanges.Test1,
+                    Exchanges.Test,
                     RoutingKeys.Test1,
                     body
                 );

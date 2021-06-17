@@ -6,7 +6,7 @@ using System.IO;
 
 namespace RabbitLight.AspNetCore.Sample.Consumers
 {
-    [Exchange(Exchanges.Test1)]
+    [Exchange(Exchanges.Test)]
     public class IntegrityTestConsumer : ConsumerBase
     {
         public const string InputPath = @"C:\Git\RabbitLight\input.txt";
@@ -23,7 +23,7 @@ namespace RabbitLight.AspNetCore.Sample.Consumers
         [Queue(Queues.Integrity, RoutingKeys.Integrity)]
         public void Integrity(MessageContext<TestMessage> context)
         {
-            var msg = context.MessageFromJson();
+            var msg = context.Message();
             lock (_lock)
             {
                 _logger.LogInformation("Line: " + msg.Content);

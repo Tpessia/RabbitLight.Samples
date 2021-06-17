@@ -6,8 +6,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitLight.AspNetCore.Sample.Consumers.Context;
 using RabbitLight.Config;
-using RabbitLight.Exceptions;
 using RabbitLight.Extensions;
+using RabbitLight.Publisher;
+using System;
 using System.Reflection;
 using System.Threading.Tasks;
 
@@ -31,34 +32,46 @@ namespace RabbitLight.AspNetCore.Sample
 
             services.AddRabbitLightContext<AspNetAppContext>(config =>
             {
+                config.Alias = nameof(AspNetAppContext);
+
+                config.UseHostedService = true;
+
                 config.ConnConfig = ConnectionConfig.FromConfig(Configuration.GetSection("RabbitLight"));
 
                 config.Consumers = Assembly.GetEntryAssembly().GetTypes();
 
-                //config.OnStart = (sp, type, ea) => Task.Run(() =>
-                //{
-                //    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger(type);
-                //    logger?.LogInformation($"\r\nSTARTING {type.Name}: {ea.DeliveryTag}\r\n");
-                //});
-
-                //config.OnEnd = (sp, type, ea) => Task.Run(() =>
-                //{
-                //    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger(type);
-                //    logger?.LogInformation($"\r\nENDING {type.Name}: {ea.DeliveryTag}\r\n");
-                //});
-
-                //config.OnAck = (sp, type, ea) => Task.Run(() =>
-                //{
-                //    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger(type);
-                //    logger?.LogInformation($"\r\nACKED {type.Name}: {ea.DeliveryTag}\r\n");
-                //});
-
-                config.OnError = (sp, ex, type, ea) => Task.Run(() =>
+                config.OnConfig = async (sp) =>
                 {
-                    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger(type);
-                    logger?.LogError($"Handled error in {type.Name}: {ea.DeliveryTag}");
-                    var requeue = !(ex is SerializationException);
-                    return requeue;
+                    var context = sp.GetRequiredService<AspNetAppContext>();
+                    await context.Api.CreateExchange("manual-exchange");
+                    await context.Api.CreateQueue("manual-queue");
+                    await context.Api.CreateBind("manual-queue", "manual-exchange", "manual-key");
+                };
+
+                config.OnStart = (sp, consumer, ea) => Task.Run(() =>
+                    consumer.Logger.LogInformation($"Starting {consumer.Type.Name}: {ea.DeliveryTag}"));
+
+                config.OnEnd = (sp, consumer, ea) => Task.Run(() =>
+                    consumer.Logger?.LogInformation($"Ending {consumer.Type.Name}: {ea.DeliveryTag}"));
+
+                config.OnAck = (sp, consumer, ea) => Task.Run(() =>
+                    consumer.Logger?.LogInformation($"Acked {consumer.Type.Name}: {ea.DeliveryTag}"));
+
+                config.OnError = (sp, consumer, ea, ex) => Task.Run(() =>
+                {
+                    consumer.Logger?.LogError($"Handled error in {consumer.Type.Name}: {ea.DeliveryTag}");
+
+                    // Requeue if the queue doesn't have a Dead Letter as fallback
+                    var requeue = !(consumer?.Queue?.Arguments?.ContainsKey("x-dead-letter-exchange")).GetValueOrDefault();
+
+                    var requeueDelay = config.ConnConfig.RequeueDelay ?? TimeSpan.FromSeconds(30);
+                    return requeue ? requeueDelay : default(TimeSpan?);
+                });
+
+                config.OnPublisherNack = (sp, sender, ea) => Task.Run(() =>
+                {
+                    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger<IPublisher>();
+                    logger?.LogError($"Publisher error: {ea.DeliveryTag}");
                 });
             });
         }
@@ -77,8 +90,6 @@ namespace RabbitLight.AspNetCore.Sample
             {
                 endpoints.MapControllers();
             });
-
-            app.UseRabbitLight();
         }
     }
 }

@@ -32,7 +32,7 @@ namespace RabbitLight.AspNetCore.Sample.Controllers
             while ((line = file.ReadLine()) != null)
             {
                 var body = new TestMessage { Content = line };
-                _publisher.PublishJson(Exchanges.Test1, RoutingKeys.Integrity, body);
+                _publisher.PublishJson(Exchanges.Test, RoutingKeys.Integrity, body);
                 counter++;
             }
 
